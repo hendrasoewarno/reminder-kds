@@ -1,0 +1,284 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+	
+	<link rel="manifest" href="manifest.json">
+	<meta name="theme-color" content="#ff4d4d">
+	<link rel="apple-touch-icon" href="icon.png">
+	
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>KDS Reminder v1.0</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0/css/all.min.css">
+    
+    <style>
+        body { font-family: 'Segoe UI', Arial, sans-serif; background-color: #e9ecef; margin: 0; display: flex; justify-content: center; }
+        .container { background: white; width: 100%; max-width: 414px; min-height: 100vh; box-shadow: 0 0 20px rgba(0,0,0,0.1); padding-bottom: 40px; display: flex; flex-direction: column; }
+        .header-card { background: linear-gradient(rgba(0,0,0,0.1), rgba(0,0,0,0.6)), url('reminder.avif'); background-size: cover; height: 130px; display: flex; align-items: flex-end; padding: 20px; color: white; }
+        .question-section { padding: 15px 25px; }
+        .label-text { font-weight: 600; font-size: 0.85rem; margin-bottom: 8px; color: #333; display: block; }
+        select, input { width: 100%; padding: 12px; border: 1px solid #ddd; border-radius: 10px; font-size: 0.9rem; box-sizing: border-box; background-color: #f9f9f9; }
+        .info-box { background-color: #f0f7ff; border-left: 4px solid #007bff; padding: 10px; margin-top: 5px; font-size: 0.8rem; color: #444; }
+        .readonly-input { background-color: #eee !important; cursor: not-allowed; }
+        .btn-action { width: calc(100% - 50px); margin: 10px auto; padding: 14px; border-radius: 30px; font-size: 1rem; font-weight: bold; display: flex; align-items: center; justify-content: center; gap: 10px; cursor: pointer; box-sizing: border-box; text-decoration: none; border: none; }
+        .btn-submit { background: #ff4d4d; color: white; margin-top: 20px; }
+        .btn-calendar { background: #4285F4; color: white; display: none; }
+        .btn-whatsapp { background: #25D366; color: white; display: none; }
+		.btn-email { background: #ea4335; color: white; display: none; } /* Warna merah Google/Email */
+        .hidden { display: none; }
+        #qr-container { text-align: center; margin: 20px 25px; padding: 15px; border: 2px dashed #ddd; border-radius: 15px; background: #fff; }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <div class="header-card">
+        <div><h1>KDS Reminder</h1><p>Reminder Angsuran Motor</p></div>
+    </div>
+
+    <div class="question-section">
+        <label class="label-text">1. Tanggal Cicilan Pertama</label>
+        <input type="date" id="tgl_pertama" onchange="hitungHari()">
+    </div>
+
+    <div class="question-section">
+        <label class="label-text">2. Jumlah Tenor (Bulan)</label>
+        <input type="number" id="tenor" value="12" min="1" oninput="hitungHari()">
+    </div>
+
+    <div class="question-section">
+        <label class="label-text">3. Nilai Angsuran (Rp)</label>
+        <input type="text" id="nominal" placeholder="Contoh: 1500000" oninput="formatCurrency(this)">
+    </div>
+
+    <div class="question-section">
+        <label class="label-text">4. Pengingat (H-? Hari Sebelum JTO)</label>
+        <input type="number" id="h_days" value="7" min="1" oninput="hitungHari()">
+        <div class="info-box">Reminder akan otomatis dimajukan ke hari Minggu terdekat jika jatuh di hari kerja.</div>
+    </div>
+
+    <div class="question-section">
+        <label class="label-text">Estimasi Tanggal Berakhir</label>
+        <input type="text" id="tgl_akhir" class="readonly-input" readonly>
+    </div>
+
+    <button class="btn-action btn-submit" onclick="validasiDanGenerate()">
+        <i class="fas fa-calendar-check"></i> Buat Jadwal Angsuran
+    </button>
+    
+    <div id="qr-container" class="hidden">
+        <p class="label-text" style="margin-top:0">Scan QR untuk Simpan:</p>
+        <img id="qr-image" src="" alt="QR Calendar" style="width: 200px; height: 200px;">
+    </div>    
+    
+    <a id="google-cal-btn" class="btn-action btn-calendar" target="_blank">
+        <i class="fab fa-google"></i> Simpan ke Google Calendar
+    </a>
+                
+    <div id="form-whatsapp" class="hidden">
+        <div class="question-section"><label class="label-text">Nomor Whatsapp</label><input type="tel" id="no_whatsapp" placeholder="6281370373223"	pattern="[0-9]{10,15}"></div>
+    </div>
+	
+    <a id="whatsapp-btn" class="btn-action btn-whatsapp" target="_blank" onclick="kirimWhatsApp()">
+        <i class="fab fa-whatsapp"></i> Kirim Calendar ke Whatsapp
+    </a>
+	
+	<div id="form-email" class="hidden">
+		<div class="question-section">
+			<label class="label-text">Alamat Email Konsumen</label>	<input type="email" id="no_email" placeholder="hendra.soewarno@email.com"> </div>
+	</div>
+
+	<a id="email-btn" class="btn-action btn-email" target="_blank" onclick="kirimEmail()">
+		<i class="fas fa-envelope"></i> Kirim Calendar ke Email
+	</a>		
+</div>
+
+<script>
+    let globalData = {};
+	
+	function el(id) {
+		return document.getElementById(id);
+	}
+	
+	function formatCurrencyValue(value) {
+		if (value !== "") {
+			return new Intl.NumberFormat('en-US').format(value);
+		} else {
+			return "";
+		}
+	}	
+	
+	function formatCurrency(input) {
+		// 1. Ambil angka saja dari input
+		let value = input.value.replace(/\D/g, "");
+		
+		// 2. Format menjadi ribuan dengan titik
+		if (value !== "") {
+			input.value = new Intl.NumberFormat('en-US').format(value);
+		} else {
+			input.value = "";
+		}
+	}
+
+	// Fungsi pembantu untuk mengambil nilai asli (angka) saat perhitungan
+	function getCleanNumber(id) {
+		let val = el(id).value;
+		return parseFloat(val.replace(/,/g, "")) || 0;
+	}		
+	
+	function lastPaymentDate(startDate, tenor) {
+		let result = new Date(startDate);
+		let targetDay = startDate.getDate();
+
+		// Tambah bulan secara langsung
+		result.setMonth(result.getMonth() + tenor-1);
+
+		// Jika terjadi overflow (misal: 31 Jan jadi 3 Mar)
+		// result.getDate() tidak akan lagi sama dengan targetDay
+		if (result.getDate() !== targetDay) {
+			// Set ke tanggal 0 bulan tersebut = hari terakhir bulan sebelumnya
+			result.setDate(0);
+		}
+		
+		return result;
+	}
+
+	function hitungHari() {
+		const startStr = el('tgl_pertama').value;
+		const tenorVal = el('tenor').value;
+		const nominal = getCleanNumber('nominal');
+
+		// Pastikan input valid
+		if (!startStr || !tenorVal) return;
+		
+		const tenor = parseInt(tenorVal);
+		let startDate = new Date(startStr);
+		
+		// 1. Panggil fungsi yang sudah kita perbaiki sebelumnya
+		// Pastikan fungsi lastPaymentDate() sudah ada di scope yang sama
+		let finalEndDate = lastPaymentDate(startDate, tenor);
+		
+		// 2. Tampilkan hasil ke input 'tgl_akhir'
+		// Menggunakan format Indonesia: "31 Maret 2026"
+		el('tgl_akhir').value = finalEndDate.toLocaleDateString('id-ID', {
+			day: 'numeric', 
+			month: 'long', 
+			year: 'numeric'
+		});
+
+		// 3. Simpan ke globalData
+		globalData = {
+			startDate: startDate,
+			endDate: finalEndDate, // Biasanya lebih berguna menyimpan object Date-nya
+			tenor: tenor,
+			nominal: nominal,
+			hDays: parseInt(el('h_days').value) || 0
+		};
+	}
+
+    function validasiDanGenerate() {
+		hitungHari();
+        if (!globalData.endDate || !globalData.nominal) {
+            alert("Mohon isi data terlebih dahulu!");
+            return;
+        }
+        generateCalendarLink();
+    }
+
+    function generateCalendarLink() {
+        const { startDate, targetDay, tenor, nominal, hDays } = globalData;
+       
+        // Logic Recurrence: Setiap bulan pada tanggal yang sama
+        // Google Calendar RRULE BYMONTHDAY akan otomatis handle bulan yang lebih pendek 
+        // Namun untuk akurasi sesuai permintaan (Feb dimajukan), kita gunakan deskripsi untuk info JTO asli
+        
+        const title = `Ingat Bayar Angsuran Motor - Rp ${parseInt(nominal).toLocaleString('id-ID')}`;
+        const description = `Pengingat rutin angsuran motor. Pastikan pembayaran dilakukan sebelum melewati tanggal jatuh tempo bulan ini.\n\nNb. -Abaikan pengingat ini jika anda telah melunasi.`;
+        
+        // Hitung tanggal mulai reminder (H-x dan cari hari Minggu)
+        let firstRemindDate = new Date(startDate);
+        firstRemindDate.setDate(firstRemindDate.getDate() - hDays);
+
+        const startCal = firstRemindDate.toISOString().split('T')[0].replace(/-/g, '');
+        const dateRange = `${startCal}T120000Z/${startCal}T130000Z`; // waktu dalam UTC, misalkan pukul 19:00 ~ 12:00 UTC
+        
+        // RRULE: Setiap bulan (FREQ=MONTHLY), sampai tenor habis
+        const rrule = `RRULE:FREQ=MONTHLY;COUNT=${tenor}`;
+
+        const baseUrl = "https://www.google.com/calendar/render?action=TEMPLATE";
+        const params = [
+            `text=${encodeURIComponent(title)}`,
+            `dates=${dateRange}`,
+            `details=${encodeURIComponent(description)}`,
+            `recur=${encodeURIComponent(rrule)}`,
+            `location=Pembayaran Angsuran`
+        ];
+
+        const finalUrl = baseUrl + "&" + params.join("&");
+        
+        el('google-cal-btn').href = finalUrl;
+        el('google-cal-btn').style.display = 'flex';
+        el('qr-image').src = `https://quickchart.io/qr?text=${encodeURIComponent(finalUrl)}&size=200`;
+        el('qr-container').classList.remove('hidden');
+        el('form-whatsapp').classList.remove('hidden');
+        el('whatsapp-btn').style.display = 'flex';
+		el('form-email').classList.remove('hidden');
+        el('email-btn').style.display = 'flex';
+    }
+
+    function kirimWhatsApp() {
+        let nomor = el('no_whatsapp').value.replace(/^0/, '62');
+        if (nomor.length < 10) { alert("Input nomor WA!"); return; }
+        
+        const linkKalender = el('google-cal-btn').href;
+        const pesan = `Halo, ini adalah link pengingat angsuran motor Anda untuk ${globalData.tenor} bulan ke depan. Silakan klik dan simpan di Kalender HP: \n\n${linkKalender}`;
+        window.open(`https://wa.me/${nomor}?text=${encodeURIComponent(pesan)}`, '_blank');
+    }
+	
+	function kirimEmail() {
+		const emailTujuan = document.getElementById('no_email').value;
+		const linkKalender = document.getElementById('google-cal-btn').href;
+
+		if (!emailTujuan) {
+			alert("Silakan isi alamat email konsumen terlebih dahulu!");
+			return;
+		}
+
+		const subjek = encodeURIComponent("Link Angsuran Motor");
+		const isiPesan = encodeURIComponent(
+			`Halo,\n\nTerima kasih telah mempercayakan sewa-beli motor Anda di Dealer kami.\n\n` +
+			`Kami telah membuatkan pengingat angsuran motor Anda untuk ${globalData.tenor} bulan ke depan. Silakan klik link di bawah ini dan pilih "Simpan" untuk menambahkannya ke kalender HP Anda:\n\n` +
+			`${linkKalender}\n\n` +
+			`Salam,\nManajemen Dealer.`
+		);
+
+		// Membuka aplikasi email default
+		window.location.href = `mailto:${emailTujuan}?subject=${subjek}&body=${isiPesan}`;
+	}		
+</script>
+<script>
+// Register Service Worker
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('./sw.js').then(reg => {
+      
+      // Deteksi jika ada update
+      reg.onupdatefound = () => {
+        const installingWorker = reg.installing;
+        installingWorker.onstatechange = () => {
+          if (installingWorker.state === 'installed') {
+            if (navigator.serviceWorker.controller) {
+              // Service worker baru telah diinstal, beritahu user atau reload
+              console.log('Update tersedia, merestart aplikasi...');
+              window.location.reload(); 
+            }
+          }
+        };
+      };
+
+    });
+  });
+}
+</script>
+</body>
+</html>

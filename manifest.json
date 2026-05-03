@@ -1,0 +1,16 @@
+{
+  "name": "KDS Reminder",
+  "short_name": "Reminder App",
+  "description": "Reminder Angsuran Motor",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#ff4d4d",
+  "icons": [
+    {
+      "src": "icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
